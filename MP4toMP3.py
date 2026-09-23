@@ -1,5 +1,7 @@
 #IN THE READ ME I NEED TO INCLUDE pip install moviepy
 
+#add show file size
+
 #The MP4toMP3 prototype converter
 
 import os
