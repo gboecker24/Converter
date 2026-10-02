@@ -153,6 +153,13 @@ class App(Root):
         e.pack(side="left", padx=6); tk.Label(self.interval_row, text="seconds", bg=BG, font=FONT).pack(side="left")
         self.interval.trace_add("write", lambda *a: self.update_estimate())
         self.interval_row.pack(pady=6)
+        self.pages_row = tk.Frame(self.stage_b, bg=BG)
+        tk.Label(self.pages_row, text="Max pages", bg=BG, font=FONT).pack(side="left")
+        self.max_pages = tk.StringVar(value="")
+        tk.Entry(self.pages_row, textvariable=self.max_pages, width=6, justify="center").pack(side="left", padx=6)
+        tk.Label(self.pages_row, text="(blank = no limit)", bg=BG, font=FONT, fg="#555").pack(side="left")
+        self.max_pages.trace_add("write", lambda *a: self.update_estimate())
+        self.pages_row.pack(pady=6)
         self.est = tk.Label(self.stage_b, text="Estimated size: XX", bg=BG, font=FONT)
         self.est.pack(pady=8)
         row = tk.Frame(self.stage_b, bg=BG); row.pack(pady=6)
@@ -192,7 +199,11 @@ class App(Root):
 
     def go_quality(self):
         self.stage_a.pack_forget(); self.stage_b.pack()
-        (self.interval_row.pack if self.fmt in cv.FRAME_FORMATS else self.interval_row.pack_forget)()
+        self.interval_row.pack_forget(); self.pages_row.pack_forget()
+        if self.fmt in cv.FRAME_FORMATS:
+            self.interval_row.pack(pady=6, before=self.est)
+        if self.fmt == "PDF":
+            self.pages_row.pack(pady=6, before=self.est)
         self.update_estimate()
 
     def get_interval(self):
@@ -201,13 +212,28 @@ class App(Root):
         except ValueError:
             return None
 
+    def get_max_pages(self):
+        """Returns (ok, value). Blank means no limit (value None)."""
+        text = self.max_pages.get().strip()
+        if not text:
+            return True, None
+        try:
+            v = int(text)
+        except ValueError:
+            return False, None
+        return (v >= 1), (v if v >= 1 else None)
+
     def update_estimate(self):
         if not (self.info and self.fmt):
             return
         iv = self.get_interval() if self.fmt in cv.FRAME_FORMATS else cv.DEFAULT_INTERVAL
         if iv is None:
             return self.est.config(text="Estimated size: \u2014 (check the interval)")
-        self.est.config(text="Estimated size: ~" + cv.human_size(cv.estimate_size(self.info, self.fmt, self.slider.level, iv)))
+        ok, mp = self.get_max_pages() if self.fmt == "PDF" else (True, None)
+        if not ok:
+            return self.est.config(text="Estimated size: \u2014 (check max pages)")
+        self.est.config(text="Estimated size: ~" + cv.human_size(
+            cv.estimate_size(self.info, self.fmt, self.slider.level, iv, mp)))
 
     # ---------------------------------------------------------------- convert
     def _build_busy(self):
@@ -221,6 +247,9 @@ class App(Root):
         iv = self.get_interval() if self.fmt in cv.FRAME_FORMATS else cv.DEFAULT_INTERVAL
         if iv is None:
             return messagebox.showerror("Invalid interval", f"Enter a number between {cv.MIN_INTERVAL:g} and {cv.MAX_INTERVAL:g}.")
+        ok, max_pages = self.get_max_pages() if self.fmt == "PDF" else (True, None)
+        if not ok:
+            return messagebox.showerror("Invalid max pages", "Enter a whole number of 1 or more, or leave it blank for no limit.")
         level, src = self.slider.level, self.info.path
         max_dim, jq = cv.FRAME_PROFILES[level]
         self.bar.config(mode="determinate", value=0); self.show("busy")
@@ -232,7 +261,8 @@ class App(Root):
             try:
                 if self.fmt == "PDF":
                     out = self._unique(src.with_suffix(".pdf"))
-                    cv.convert_video_to_pdf(src, out, iv, max_dim=max_dim, jpeg_quality=jq, progress=progress)
+                    cv.convert_video_to_pdf(src, out, iv, max_pages=max_pages, max_dim=max_dim,
+                                          jpeg_quality=jq, progress=progress)
                 elif self.fmt == "MP3":
                     out = self._unique(src.with_suffix(".mp3"))
                     cv.convert_video_to_mp3(src, out, cv.MP3_BITRATES[level], progress=progress)

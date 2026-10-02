@@ -173,7 +173,8 @@ def probe_video(path) -> VideoInfo:
     return VideoInfo(path, path.stat().st_size, duration, fps, width, height, frame)
 
 
-def estimate_size(info: VideoInfo, fmt: str, level: int, interval: float = DEFAULT_INTERVAL) -> int:
+def estimate_size(info: VideoInfo, fmt: str, level: int, interval: float = DEFAULT_INTERVAL,
+                  max_pages: int | None = None) -> int:
     """Estimated output size in bytes for the chosen format and quality level."""
     if fmt == "MP3":
         bits_per_second = int(MP3_BITRATES[level][:-1]) * 1000
@@ -184,7 +185,10 @@ def estimate_size(info: VideoInfo, fmt: str, level: int, interval: float = DEFAU
     if key not in info._frame_bytes:
         info._frame_bytes[key] = len(_encode(_resize(info.sample_frame, max_dim), ext, jpeg_quality))
     per_frame = info._frame_bytes[key] + (PDF_PAGE_OVERHEAD if fmt == "PDF" else 0)
-    return per_frame * expected_frames(info.duration, interval)
+    frames = expected_frames(info.duration, interval)
+    if fmt == "PDF" and max_pages:
+        frames = min(frames, max_pages)
+    return per_frame * frames
 
 
 def output_size(path) -> int:
